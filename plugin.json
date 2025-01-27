@@ -1,17 +1,22 @@
 {
-    "name":"Full Moon Platform plugin example",
+    "name":"NewbiePack",
     "main":"index",
-    "description":"A plugin developed with Full Moon Platform.",
+    "description":"6",
     "build_dir":"dist",
-    "data_path":"fmp_plugin_example",
+    "data_path":"NewbiePack",
     "src_dir":"src",
-    "plugin_dir_name":"fmp_plugin_example",
+    "plugin_dir_name":"NewbiePack",
     "supported_platforms":{
         "mode":"bl",
-        "list":[]
+        "list":[
+            "esjse"
+        ]
     },
-    "permissionRoot":"fmppluginexample",
-    "features":[],
+    "permissionRoot":"newbiepack",
+    "features":[
+        "yml",
+        "sqlite3"
+    ],
     "priorities":{
         "default":[
             "LNSDK"
