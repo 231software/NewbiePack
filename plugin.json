@@ -1,0 +1,20 @@
+{
+    "name":"Full Moon Platform plugin example",
+    "main":"index",
+    "description":"A plugin developed with Full Moon Platform.",
+    "build_dir":"dist",
+    "data_path":"fmp_plugin_example",
+    "src_dir":"src",
+    "plugin_dir_name":"fmp_plugin_example",
+    "supported_platforms":{
+        "mode":"bl",
+        "list":[]
+    },
+    "permissionRoot":"fmppluginexample",
+    "features":[],
+    "priorities":{
+        "default":[
+            "LNSDK"
+        ]
+    }
+}
