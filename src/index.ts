@@ -10,18 +10,18 @@ function tellExecutor(executor:CommandExecutor,msg:string){
 import {SQLDataType, SQLDataTypeEnum, SQLite3, YMLFile} from "../lib/FeaturesIndex.js"
 import {data_path} from "../lib/plugin_info.js"
 import * as crypto from "crypto"
+import { CommandError } from "./CommandError.js";
 const conf=new YMLFile(data_path+"/config.yml")
 const items_conf=new YMLFile(data_path+"/items.yml")
 const md5TableNamePrefix="md5_"
 items_conf.init("packs",[])
 //物品：一个列表
-// 每个物品还包括nbt，代表给予玩家的物品要带有什么样的nbt，暂时不做，
-// 每个物品还有count，代表数量
-// 物品还有一个identifier，代表这个物品
-// 物品有一个container，代表潜影盒、收纳袋等可内含物品的内容
-//奖励开始时间start：从哪天开始发放这个奖励
-//奖励截止时间expire：过了这个时间后就不能领取这个奖励了
-//奖励限定玩家player_list：指定玩家的名字，随后奖励会只给对应名字的玩家发放。string[]类型
+//todo:每个物品还包括nbt，代表给予玩家的物品要带有什么样的nbt，暂时不做，
+//todo:物品有一个container，代表潜影盒、收纳袋等可内含物品的内容
+//todo：奖励开始时间start：从哪天开始发放这个奖励
+//todo（优先）:奖励截止时间expire：过了这个时间后就不能领取这个奖励了
+//过期时间为yyyymmddhhmm格式，也可以yyyymmdd默认小时分钟为当天0:00，格式错误会直接Logger.error
+//todo:奖励限定玩家player_list：指定玩家的名字，随后奖励会只给对应名字的玩家发放。string[]类型
 //identifier：确定补偿的唯一性，修改它会导致补偿重新开始，然而原有数据不会被覆盖或删除。
 //identifier允许有任何字符，虽然它与数据库的表名有关，但是插件会为identifier计算哈希值
 //表名是identifer的哈希值，由于运维是不能通过哈希值反向得到identifier的表名的
@@ -31,7 +31,7 @@ items_conf.init("packs",[])
 //发放至邮箱：插件内置一个邮件系统，用于领取奖励，如果不发放至邮箱，插件将持续关注玩家物品栏，在玩家物品栏有空位时立刻发放
 
 //命令todo
-//newbiepack giveme 奖励名 强制给予一次指定的奖励，会清空自己对应奖励的给予记录并调用一次进服发放函数以模拟触发发放
+//newbiepack reset 奖励identifier 目标选择器或玩家名 指定了目标选择器就只清空指定玩家的领取记录，未指定就清空所有人领取记录
 
 const db=new SQLite3(data_path+"/data.db")
 //记录identifier与哈希值对应关系的表
@@ -124,12 +124,17 @@ PlayerJoinEvent.on(e=>{
         let {distributedItems,distributedTime}=getPlayerReciveRecord(e.player.uuid,pack.identifier)
         //已经发放过的就不发了
         if(distributedTime!=undefined)continue;
+        const successfullyDistributedItems:any[]=[]
         //遍历物品列表对玩家进行发放
         givePlayerPack(pack,e.player,
             //如果物品已经给玩家发过，就不发这个物品了
             item=>!distributedItems.includes(item.identifier),
             //既然已经发放，将该奖励加入已收到的奖励列表
-            item=>distributedItems.push(item.identifier)
+            item=>{
+                distributedItems.push(item.identifier)
+                e.player.tell("奖励"+pack.remark+"中的"+(item.remark?item.remark:item.identifier).toString()+"已发放至您的背包")
+                successfullyDistributedItems.push(item)
+            }
         )
 
         //全部发放完毕时，检查玩家是否已经收到了当前奖励中的所有物品
@@ -139,9 +144,10 @@ PlayerJoinEvent.on(e=>{
             if(!distributedItems.includes(packItem.identifier))playerRecievedAllItems=false
         }
         //todo：提示玩家都收到了奖励的哪些
-        e.player.tell("奖励"+pack.remark+"已发放至您的背包")
+        //如果玩家没有收到任何东西，就不要提示玩家
+        if(successfullyDistributedItems.length)e.player.tell("奖励"+pack.remark+"中的以上物品已发放至您的背包")
         //如果playerRecievedAllItems为true，证明已经收到所有物品，写入领取时间
-        distributedTime=new Date()
+        if(playerRecievedAllItems)distributedTime=new Date()
         //将已经发放的物品直接写入该玩家领取记录
         setPlayerReciveRecord(e.player.uuid,pack.identifier,distributedItems,distributedTime)
     }
@@ -168,6 +174,7 @@ function givePlayerPack(packConf:any,player:Player,condition:(itemConf:any)=>boo
         if(!condition(item))continue;
         //背包检测，如果发放失败就直接continue
         //todo：给予玩家带有nbt的物品
+        //count配置项可以覆盖nbt中的Count标签
         if(!player.getInventory().put(new Item(item.type,item.count==undefined?1:item.count)))continue;
         onItemDistributed(item)
         //此时已经发放成功，将当前物品的identifier记录下来供后面返回
@@ -243,10 +250,13 @@ export const mgrcmd=new Command("newbiepack",
         new CommandParam(CommandParamType.Mandatory,"unload",CommandParamDataType.Enum,new CommandEnum("unload", ["unload"]),CommandEnumOptions.Unfold),
         new CommandParam(CommandParamType.Mandatory,"load",CommandParamDataType.Enum,new CommandEnum("load", ["load"]),CommandEnumOptions.Unfold),
         new CommandParam(CommandParamType.Mandatory,"exe",CommandParamDataType.Enum,new CommandEnum("exe", ["exe"]),CommandEnumOptions.Unfold),
+        new CommandParam(CommandParamType.Mandatory,"reset",CommandParamDataType.Enum,new CommandEnum("reset", ["reset"]),CommandEnumOptions.Unfold),
         new CommandParam(CommandParamType.Mandatory,"devoptions",CommandParamDataType.String),
         new CommandParam(CommandParamType.Mandatory,"dbcmd",CommandParamDataType.String),
-        new CommandParam(CommandParamType.Mandatory,"identifier",CommandParamDataType.String)
-    ],[["reload"],["log","info"],["dev","devoptions"],["db","exe","dbcmd"],["db","unload"],["db","load"],["giveme","identifier"]],
+        new CommandParam(CommandParamType.Mandatory,"identifier",CommandParamDataType.String),
+        new CommandParam(CommandParamType.Optional,"victims",CommandParamDataType.Player),
+        new CommandParam(CommandParamType.Optional,"player_names",CommandParamDataType.String),
+    ],[["reload"],["log","info"],["dev","devoptions"],["db","exe","dbcmd"],["db","unload"],["db","load"],["giveme","identifier"],["reset","identifier","victims"],["reset","identifier","player_names"]],
     result=>{
         if (result.params.get("reload")?.value == "reload") {
             if (conf.reload()) {
@@ -286,6 +296,27 @@ export const mgrcmd=new Command("newbiepack",
             //if(player.getInventory().put(new Item("minecraft:bucket",20)))player.tell("给予成功")
             //else player.tell("给予失败")
         }
+        else if(result.params.get("reset")?.value=="reset"){
+            const identifier=result.params.get("identifier")?.value as string|undefined
+            if(result.executor.type!=CommandExecutorType.Player){
+                if(result.executor.type==CommandExecutorType.Console)Logger.error("无法以控制台身份测试获取奖励")
+                return;
+            }
+            const player=result.executor.object as Player
+            if(identifier==undefined){
+                player.tell("请提供奖励的identifier！")
+                return;
+            }
+            const targets=getCmdPlayerTargetsUUID(result.params)
+            if(targets==undefined){
+                player.tell("清除所有玩家奖励领取记录未完成")
+                return;
+            }
+            for(let targetUUID of targets){
+                setPlayerReciveRecord(targetUUID,identifier,[],undefined)
+            }
+            player.tell("已经成功重置了他们在“"+identifier+"”的奖励领取记录，他们现在可以在邮件中重新领取这些奖励。")
+        }
         else if(result.params.get("dev")?.value=="dev"){
             const tableName=result.params.get("devoptions")?.value
             tellExecutor(result.executor,JSON.stringify(db.queryAllSync("select * from "+tableName),undefined,4))
@@ -303,3 +334,45 @@ export const mgrcmd=new Command("newbiepack",
     },
     InternalPermission.GameMasters,[],"管理新手礼包与玩家补偿"
 )
+
+
+function getCmdPlayerTargetsUUID(cmdParams:Map<string,any>):string[]|undefined{
+    const victims=cmdParams.get("victims")?.value as Player[]|undefined
+    const names=cmdParams.get("player_names")?.value as string|undefined
+    const validParamsCount=getDefinedCount(victims,names)
+    //这些参数中只能有一个是有效值，如果发现都拥有有效值则证明代码错误，直接报错
+    if(validParamsCount>1)throw new CommandError("插件收到了多种命令指定的目标，代码可能存在问题。")
+    const uuids:string[]=[]
+    //谁是有效值就用谁
+    if(victims){
+        for(let player of victims)uuids.push(player.uuid)
+        return uuids
+    }
+    if(names){
+        //后续在这里做一个识别多个玩家名字的功能
+        uuids.push(...name2uuid(names))
+        return uuids
+    }
+    //如果这些参数中没有一个是有效值则直接返回undefined
+    return undefined
+}
+function getDefinedCount(...args: any[]): number {
+    let definedCount = 0;
+
+    for (const arg of args) {
+        if (arg !== undefined) {
+            definedCount++;
+        }
+    }
+
+    return definedCount;
+}
+//由于可能有多个玩家叫同一个名字也有可能根本查不到所以此处返回字符串数组
+function name2uuid(name:string):string[]{
+    const result:string[]=[]
+    const dbResults=db.queryAllSync("SELECT uuid FROM player_info WHERE name=?",name)
+    for(let dbResult of dbResults){
+        result.push(dbResult.uuid)
+    }
+    return result;
+}
