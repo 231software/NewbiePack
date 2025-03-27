@@ -1,9 +1,9 @@
-import {Logger,InitEvent, PlayerJoinEvent, Player, Item,Command, CommandEnum, CommandEnumOptions, CommandExecutor, CommandExecutorType, CommandParam, CommandParamDataType, CommandParamType, InternalPermission, PlayerToggleSneakEvent} from "../lib/index.js";
+import {Logger,InitEvent, PlayerJoinEvent, Player, Item,Command, CommandEnum, CommandEnumOptions, CommandExecutor, CommandExecutorType, CommandParam, CommandParamDataType, CommandParamType, PlayerToggleSneakEvent} from "../lib/index.js";
 
 
 function tellExecutor(executor:CommandExecutor,msg:string){
-    switch(executor.type){
-        case CommandExecutorType.Player:executor.object.tell(msg);break;
+    switch(executor.commandExecutorType){
+        case CommandExecutorType.Player:executor.asPlayer()?.tell(msg);break;
         case CommandExecutorType.Console:Logger.info(msg);break;
     }
 }
@@ -266,12 +266,12 @@ export const mgrcmd=new Command("newbiepack",
             }
         }
         else if(result.params.get("giveme")?.value=="giveme"){
-            if(result.executor.type!=CommandExecutorType.Player){
-                if(result.executor.type==CommandExecutorType.Console)Logger.error("无法以控制台身份测试获取奖励")
+            if(result.executor.commandExecutorType!=CommandExecutorType.Player){
+                if(result.executor.commandExecutorType==CommandExecutorType.Console)Logger.error("无法以控制台身份测试获取奖励")
                 return;
             }
             let identifierNotFound=true
-            const player=result.executor.object as Player
+            const player=result.executor.asPlayer() as Player
             //遍历寻找identifier匹配的奖励包配置
             const cmdIdentifier=result.params.get("identifier")?.value
             if(!cmdIdentifier){
@@ -298,11 +298,11 @@ export const mgrcmd=new Command("newbiepack",
         }
         else if(result.params.get("reset")?.value=="reset"){
             const identifier=result.params.get("identifier")?.value as string|undefined
-            if(result.executor.type!=CommandExecutorType.Player){
-                if(result.executor.type==CommandExecutorType.Console)Logger.error("无法以控制台身份测试获取奖励")
+            if(result.executor.commandExecutorType!=CommandExecutorType.Player){
+                if(result.executor.commandExecutorType==CommandExecutorType.Console)Logger.error("无法以控制台身份测试获取奖励")
                 return;
             }
-            const player=result.executor.object as Player
+            const player=result.executor.asPlayer() as Player
             if(identifier==undefined){
                 player.tell("请提供奖励的identifier！")
                 return;
@@ -332,7 +332,7 @@ export const mgrcmd=new Command("newbiepack",
             }
         }
     },
-    InternalPermission.GameMasters,[],"管理新手礼包与玩家补偿"
+    {operator:true,console:true,internal:true},[],"管理新手礼包与玩家补偿"
 )
 
 
